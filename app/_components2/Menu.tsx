@@ -10,7 +10,6 @@ import React, {
   useState
 } from 'react'
 import { twMerge } from 'tailwind-merge'
-import { buttonVariants } from './Button'
 
 interface MenuContextProps {
   focusedIndex: number
@@ -85,7 +84,7 @@ export function Menu({ children }: { children: ReactNode }) {
             setFocusedIndex(-1)
           }
         }}
-        className={twMerge('flex flex-col p-1 overflow-y-auto max-h-80 outline-none ring-blue-300 focus:ring-2')}
+        className={twMerge('flex flex-col p-1 rounded-md overflow-y-auto outline-none ring-blue-300 focus:ring-2')}
       >
         {React.Children.map(children, (child, index) => {
           if (React.isValidElement(child) && child.type === Menu.Item) {
@@ -128,8 +127,7 @@ Menu.Item = function MenuItem({
       onMouseLeave={() => setFocusedIndex(-1)}
       {...props}
       className={twMerge(
-        buttonVariants({ variant: 'link', size: 'lg' }),
-        'w-full',
+        'text-gray-700 flex items-center justify-between gap-6 px-3 py-2 rounded-[3px] cursor-pointer',
         disabled && 'text-gray-300 cursor-not-allowed',
         focusedIndex === index && 'bg-gray-100',
         className

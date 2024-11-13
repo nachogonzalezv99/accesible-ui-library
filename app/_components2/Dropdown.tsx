@@ -2,7 +2,6 @@ import {
   cloneElement,
   ComponentProps,
   createContext,
-  CSSProperties,
   ReactElement,
   ReactNode,
   RefObject,
@@ -220,15 +219,17 @@ export function Dropdown({
       }
     }
     const handleKeyDown = (e: KeyboardEvent) => {
-      const focusableItems = (dropdownRef.current?.querySelectorAll('button, [href], input, select, textarea, *[tabindex="0"]') || []) as HTMLElement[]
+      const focusableItems = (dropdownRef.current?.querySelectorAll(
+        'button, [href], input, select, textarea, *[tabindex="0"]'
+      ) || []) as HTMLElement[]
       const filteredFocusableItems = Array.from(focusableItems).filter(item => item.tabIndex !== -1)
       const firstItem = filteredFocusableItems[0]
       const lastItem = filteredFocusableItems[filteredFocusableItems.length - 1]
 
       const focusNextElement = (direction: 'prev' | 'next') => {
-        const allFocusableElements = Array.from(document.querySelectorAll('button, [href], input, select, textarea, *[tabindex="0"]')).filter(
-          element => !(element as HTMLButtonElement).disabled && !element.hasAttribute('aria-disabled')
-        )
+        const allFocusableElements = Array.from(
+          document.querySelectorAll('button, [href], input, select, textarea, *[tabindex="0"]')
+        ).filter(element => !(element as HTMLButtonElement).disabled && !element.hasAttribute('aria-disabled'))
         const triggerIndex = allFocusableElements.indexOf(triggerRef.current!)
 
         const isFocused = triggerRef.current === document.activeElement
