@@ -18,7 +18,7 @@ export default function Page() {
           <button
             key={project.id}
             className="flex-1"
-            onClick={() => router.push(routesObj.home.projects.projectById(project.id))}
+            onClick={() => router.push(routesObj.home.projects.byId(project.id).path)}
           >
             <Card>
               <Card.Header>{project.name}</Card.Header>

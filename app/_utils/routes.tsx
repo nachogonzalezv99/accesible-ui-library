@@ -1,6 +1,8 @@
 'use client'
 import { createContext, ReactNode, useContext, useState } from 'react'
 import { AiOutlineUser } from 'react-icons/ai'
+import { toCamelCase } from './strings'
+import { CamelCase } from './types'
 
 export type Route = {
   label: string
@@ -15,18 +17,18 @@ export const routes = [
     label: 'Home',
     path: '/',
     subroutes: [
-      { label: 'My feed', path: '/my-feed', subroutes: [{ label: 'Likes', path: '/my-feed/likes' }] },
+      { label: 'My feed', path: '/my-feed', subroutes: [{ label: 'Likes', path: '/likes' }] },
       { label: 'Conversations', path: '/my-conversations' },
       {
         label: 'Profile',
         path: '/profile',
         subroutes: [
           {
-            label: 'My feed',
-            path: '/profile/my-feed',
-            subroutes: [{ label: 'Likes', path: '/profile/my-feed/likes' }]
+            label: 'My feed profile',
+            path: '/my-feed',
+            subroutes: [{ label: 'Likes', path: '/likes' }]
           },
-          { label: 'Conversations', path: '/profile/my-conversations' }
+          { label: 'Conversations', path: '/my-conversations' }
         ]
       },
       {
@@ -35,9 +37,15 @@ export const routes = [
         startAdornment: <AiOutlineUser />,
         subroutes: [
           {
-            label: 'Project by id',
-            path: '/projects/[projectId]'
-            // subroutes: [{ label: 'Subprojects', path: '/projects/[projectId]/subprojects' }]
+            label: 'By id',
+            path: '/[projectId]',
+            subroutes: [
+              {
+                label: 'Subprojects',
+                path: '/subprojects',
+                subroutes: [{ label: 'By id', path: '/[subprojectId]', subroutes: [{ label: 'Last', path: '/last' }] }]
+              }
+            ]
           }
         ]
       }
@@ -45,55 +53,66 @@ export const routes = [
   }
 ] as const satisfies Route[]
 
-// Utility function to convert strings to camelCase
-function toCamelCase(str: string): string {
-  return str
-    .replace(/(?:^\w|[A-Z]|\b\w|\s+)/g, (match, index) => (index === 0 ? match.toLowerCase() : match.toUpperCase()))
-    .replace(/\s+/g, '')
-    .replace(/[^a-zA-Z0-9]/g, '')
-}
-
-type CamelCase<S extends string> = S extends `${infer First} ${infer Rest}`
-  ? `${Lowercase<First>}${Capitalize<CamelCase<Rest>>}` // Convert first word to lowercase, rest to capitalized camelCase
-  : Lowercase<S> // For single words, just lowercase
-
 // The transformed routes type with camel-cased keys
 type TransformedRoutes<T extends readonly Route[]> = {
-  [K in T[number] as CamelCase<K['label']>]: K extends { subroutes: readonly (infer SubRoute extends Route)[] } // Use readonly (infer SubRoute)[] for subroutes
-    ? TransformedRoutes<readonly [SubRoute]> // Ensure subroutes are readonly
-    : (value: string) => string // Allow string paths and dynamic paths as functions
+  [K in T[number] as CamelCase<K['label']>]: K extends { subroutes: readonly Route[] }
+    ? { path: string } & (hasDynamicParam<K['path']> extends true
+        ? (...args: string[]) => { path: string } & TransformedRoutes<K['subroutes']>
+        : TransformedRoutes<K['subroutes']>)
+    : K extends { path: infer P }
+    ? hasDynamicParam<P> extends true
+      ? (...args: string[]) => { path: string }
+      : { path: string }
+    : never
 }
 
-function hasDynamicParams(path: string): boolean {
-  return /\[.*?\]/.test(path) // Check for [something] pattern in the path
+// Helper type to check if path is dynamic
+type hasDynamicParam<S> = S extends string ? (S extends `${string}[${string}]${string}` ? true : false) : false
+
+// Normalize the current path to avoid double slashes
+
+export const normalizePath = (path: string) => path.replace(/\/+/g, '/')
+
+export const getFullPath = (accumulated: string, path: string) =>
+  normalizePath(accumulated + (path.startsWith('/') ? path : `/${path}`))
+
+export function isDynamicRoute(routePath: string) {
+  return /\[.*?\]/.test(routePath) // Check if the route has dynamic segments like [projectId]
 }
 
 // Transform function to generate the camelCase keys and paths
-function transformRoutes<T extends readonly Route[]>(routes: T): TransformedRoutes<T> {
+function transformRoutes<T extends readonly Route[]>(routes: T, basePath = ''): TransformedRoutes<T> {
   const result: any = {}
 
   routes.forEach(route => {
     const { label, path, subroutes } = route
     const camelCaseLabel = toCamelCase(label)
 
-    // If the path has dynamic parameters, create a function to handle them
-    if (hasDynamicParams(path)) {
+    const fullPath = getFullPath(basePath, path)
+
+    if (isDynamicRoute(path)) {
+      // If it's a dynamic path (like /[projectId]), create a function
       result[camelCaseLabel] = (...args: string[]) => {
-        let finalPath = path
-        // Replace [something] with the corresponding argument
+        let finalPath = fullPath
         args.forEach(arg => {
-          finalPath = finalPath.replace(/\[.*?\]/, arg) // Replace first dynamic part
+          finalPath = finalPath.replace(/\[.*?\]/, arg) // Replace dynamic part like [projectId] with the argument
         })
-        return finalPath
+
+        // Return path along with resolved subroutes if any
+        const resolvedSubroutes = subroutes ? transformRoutes(subroutes, finalPath) : {}
+        return { path: finalPath, ...resolvedSubroutes }
       }
     } else {
-      // For normal paths, just store the string path
-      result[camelCaseLabel] = path
-    }
+      // Static path: directly assign the full path
+      result[camelCaseLabel] = { path: fullPath }
 
-    // If there are subroutes, recursively call transformRoutes
-    if (subroutes && subroutes.length > 0) {
-      result[camelCaseLabel] = transformRoutes(subroutes)
+      // If there are subroutes, recursively resolve them with the accumulated path
+      if (subroutes && subroutes.length > 0) {
+        result[camelCaseLabel] = {
+          ...result[camelCaseLabel],
+          ...transformRoutes(subroutes, fullPath)
+        }
+      }
     }
   })
 
@@ -102,11 +121,10 @@ function transformRoutes<T extends readonly Route[]>(routes: T): TransformedRout
 
 // Generate the typed routes object
 export const routesObj = transformRoutes(routes)
-console.log(routesObj.home)
 
 interface RouterContextProps {
-  title: string
-  updateTitle: (name: string) => void
+  title: string[]
+  updateTitle: (name: string[]) => void
 }
 
 const RouterContext = createContext<RouterContextProps | null>(null)
@@ -118,9 +136,9 @@ export function useRouting() {
 }
 
 export function RouterProvider(props: { children: ReactNode }) {
-  const [title, setTitle] = useState('')
+  const [title, setTitle] = useState<string[]>([])
 
-  const updateTitle = (name: string) => setTitle(name)
+  const updateTitle = (name: string[]) => setTitle(name)
 
   return <RouterContext.Provider value={{ title, updateTitle }} {...props} />
 }

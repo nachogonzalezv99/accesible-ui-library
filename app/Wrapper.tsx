@@ -22,7 +22,6 @@ import { routes } from './_utils/routes'
 import { CustomDropdown } from './CustomDropdown'
 
 export function Wrapper({ children }: { children: ReactNode }) {
-  console.log(useGetDynamicBreadcrumb(routes))
   return (
     <Layout>
       <Layout.Sidebar>
@@ -84,9 +83,11 @@ export function Wrapper({ children }: { children: ReactNode }) {
       </Layout.Sidebar>
       <Layout.Main>
         <Layout.Header>
-          <div className="grid grid-cols-3 items-center">
+          <div className="grid grid-cols-[1fr_auto_1fr] gap-6 items-center">
             <Breadcrumb items={useGetDynamicBreadcrumb(routes)} />
-            <div className="justify-self-center text-center">{useGetRouteTitle(routes)}</div>
+            <div className="justify-self-center text-center text-lg font-semibold whitespace-nowrap">
+              {useGetRouteTitle(routes)}
+            </div>
 
             <div className="flex gap-1 justify-end">
               <CustomDropdown>Share</CustomDropdown>

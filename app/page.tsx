@@ -12,6 +12,7 @@ import { MultiSelect } from './_components2/MultiSelect'
 import { Select } from './_components2/Select'
 import { Tag } from './_components2/Tag'
 import { CustomDropdown } from './CustomDropdown'
+import { Menu } from './_components2/Menu'
 
 export default function Page() {
   return (
@@ -343,6 +344,20 @@ export default function Page() {
             <MultiSelect className="w-60" size="lg" items={['Uno', 'Dos']} />
             <Button size="lg">Small</Button>
           </div>
+
+          <Card>
+            <Card.Header title="Menu" />
+            <Card.Body className="flex gap-5 items-center flex-wrap">
+              <Menu>
+                <Menu.Item>Item 1</Menu.Item>
+                <Menu.Item>Item 2</Menu.Item>
+                
+                <Menu.Item>Item 7</Menu.Item>
+                <Menu.Item>Item 8</Menu.Item>
+                <Menu.Item>Item 9</Menu.Item>
+              </Menu>
+            </Card.Body>
+          </Card>
 
           <div className="flex gap-4">
             <Card>

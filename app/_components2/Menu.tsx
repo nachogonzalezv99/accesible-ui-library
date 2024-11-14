@@ -9,6 +9,7 @@ import React, {
   useRef,
   useState
 } from 'react'
+import { AiOutlineDown } from 'react-icons/ai'
 import { twMerge } from 'tailwind-merge'
 
 interface MenuContextProps {
@@ -24,6 +25,25 @@ export function useMenu() {
   return context
 }
 
+const renderChildren = (children: React.ReactNode, currentIndexObj: { index: number }): React.ReactNode => {
+  return React.Children.map(children, child => {
+    if (React.isValidElement(child)) {
+      if (child.type === Menu.Item) {
+        currentIndexObj.index += 1
+        return React.cloneElement(child, { index: currentIndexObj.index })
+      }
+
+      if (child.type === Menu.Subgroup) {
+        const subgroupChildren = renderChildren(child.props.children, currentIndexObj)
+        currentIndexObj.index += 1
+        return React.cloneElement(child, { children: subgroupChildren, index: currentIndexObj.index })
+      }
+    }
+
+    return child
+  })
+}
+
 export function Menu({ children }: { children: ReactNode }) {
   const [focusedIndex, setFocusedIndex] = useState(-1)
   const [isFocused, setIsFocused] = useState(false)
@@ -31,13 +51,34 @@ export function Menu({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      const childrenArray = React.Children.toArray(children)
+      // Helper function to collect indices of enabled Menu.Items recursively
+      const collectMenuItems = (
+        children: React.ReactNode,
+        indices: number[] = [],
+        indexObj = { currentIndex: 0 }
+      ): number[] => {
+        React.Children.forEach(children, child => {
+          if (React.isValidElement(child)) {
+            // If it's a Menu.Item and not disabled, assign and add the current index
+            if (child.type === Menu.Item && !child.props.disabled) {
+              indices.push(indexObj.currentIndex)
+              indexObj.currentIndex += 1 // Increment for the next item
+            }
 
-      const enabledIndices = childrenArray
-        .map((child, index) =>
-          React.isValidElement(child) && child.type === Menu.Item && !child.props.disabled ? index : null
-        )
-        .filter(index => index !== null) as number[]
+            // If it's a Menu.Subgroup, recurse with its children
+            if (child.type === Menu.Subgroup && child.props.children) {
+              collectMenuItems(child.props.children, indices, indexObj)
+              indices.push(indexObj.currentIndex)
+              indexObj.currentIndex += 1 // Increment for the next item
+            }
+          }
+        })
+        return indices
+      }
+
+      // Use collectMenuItems to get all enabled indices
+      const enabledIndices = collectMenuItems(children)
+      console.log(enabledIndices)
 
       if (enabledIndices.length === 0) return
 
@@ -54,7 +95,10 @@ export function Menu({ children }: { children: ReactNode }) {
         setFocusedIndex(enabledIndices[prevIndex])
       } else if (e.key === 'Enter' && focusedIndex !== -1) {
         console.log('enter')
-        if (React.isValidElement(childrenArray[focusedIndex])) childrenArray[focusedIndex].props?.onClick()
+        const selectedChild = enabledIndices[focusedIndex]
+        if (React.isValidElement(children[selectedChild])) {
+          children[selectedChild].props?.onClick()
+        }
       }
     }
 
@@ -86,12 +130,7 @@ export function Menu({ children }: { children: ReactNode }) {
         }}
         className={twMerge('flex flex-col p-1 rounded-md overflow-y-auto outline-none ring-blue-300 focus:ring-2')}
       >
-        {React.Children.map(children, (child, index) => {
-          if (React.isValidElement(child) && child.type === Menu.Item) {
-            return React.cloneElement(child as React.ReactElement<{ index: number }>, { index })
-          }
-          return child
-        })}
+        {renderChildren(children, { index: -1 })}
       </div>
     </MenuContext.Provider>
   )
@@ -123,7 +162,10 @@ Menu.Item = function MenuItem({
       tabIndex={-1}
       onClick={event => !disabled && onClick?.(event)}
       aria-disabled={disabled}
-      onMouseEnter={() => !disabled && setFocusedIndex(index!)}
+      onMouseEnter={() => {
+        !disabled && setFocusedIndex(index!)
+        console.log(index)
+      }}
       onMouseLeave={() => setFocusedIndex(-1)}
       {...props}
       className={twMerge(
@@ -147,4 +189,31 @@ Menu.Item = function MenuItem({
 
 Menu.Divider = function MenuDivider() {
   return <div className="w-full h-[1px] bg-gray-200 my-1" />
+}
+
+Menu.Subgroup = function MenuSubgroup({
+  children,
+  label,
+  index,
+  ...props
+}: {
+  children: ReactNode
+  label: string
+  index?: number
+}) {
+  const [open, setOpen] = useState(true)
+  return (
+    <div>
+      <Menu.Item
+        index={index}
+        // onClick={() => setOpen(prev =>!prev)}
+        onKeyDown={event => event.key === 'Enter' && setOpen(prev => !prev)}
+        rightAddornment={<AiOutlineDown />}
+        {...props}
+      >
+        {label}
+      </Menu.Item>
+      {open && <div className="ml-4">{children}</div>}
+    </div>
+  )
 }

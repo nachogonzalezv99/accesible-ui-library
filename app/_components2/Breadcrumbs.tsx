@@ -1,9 +1,10 @@
-import { usePathname } from 'next/navigation'
-import { ComponentProps, ReactElement, ReactNode } from 'react'
+import { useParams, usePathname } from 'next/navigation'
+import { ComponentProps, ReactElement, ReactNode, useState } from 'react'
 import { AiOutlineHome } from 'react-icons/ai'
 import { twMerge } from 'tailwind-merge'
-import { Route, useRouting } from '../_utils/routes'
+import { getFullPath, isDynamicRoute, Route, useRouting } from '../_utils/routes'
 import { buttonVariants } from './Button'
+import { Params } from 'next/dist/server/request/params'
 
 export interface BreadcrumbItem extends ComponentProps<'a'> {
   label: ReactNode
@@ -17,20 +18,23 @@ export interface BreadcrumbProps extends ComponentProps<'div'> {
   divider?: ReactNode
 }
 export function Breadcrumb({ items, divider = '/', className, ...props }: BreadcrumbProps) {
+  const isLast = (index: number) => index === items.length - 1
+  console.log(items)
+
   return (
     <div className={twMerge('flex items-center gap-[2px]', className)} {...props}>
       {items.map((item, index) => (
         <span key={index} className="flex items-center gap-[2px]">
           <a
             key={index}
-            href={item.path}
+            href={isLast(index) ? undefined : item.path}
             {...item}
             className={twMerge(
               buttonVariants({ size: 'sm', variant: 'link' }),
-              'gap-2',
-              index < items.length - 1
-                ? 'text-gray-400'
-                : 'text-gray-800 hover:bg-transparent hover:border-transparent active:bg-transparent active:border-transparent cursor-default'
+              'gap-2 whitespace-nowrap',
+              isLast(index)
+                ? 'text-gray-800 hover:bg-transparent hover:border-transparent active:bg-transparent active:border-transparent cursor-default'
+                : 'text-gray-400'
             )}
           >
             {item.startAdornment ? <span>{item.startAdornment}</span> : index === 0 ? <AiOutlineHome /> : null}
@@ -38,97 +42,101 @@ export function Breadcrumb({ items, divider = '/', className, ...props }: Breadc
             {item.endAdornment && <span>{item.endAdornment}</span>}
           </a>
 
-          {index < items.length - 1 && <span className="text-gray-400">{divider}</span>}
+          {!isLast(index) && <span className="text-gray-400">{divider}</span>}
         </span>
       ))}
     </div>
   )
 }
 
+const matchDynamicRoute = (fullPath: string, routePath: string) => {
+  const dynamicPattern = fullPath.replace(/\[.*?\]/g, '[^/]+')
+  return new RegExp(`^${dynamicPattern}$`).test(routePath)
+}
+
+const calculateDynamicTitle = (route: Route, title: string[], index: number): string => {
+  if (!isDynamicRoute(route.path)) {
+    return route.label;
+  }
+
+  // Use the title at the current dynamicIndex position
+  return title[index] ?? route.label; // Fallback to route label if index is out of bounds
+};
+
+const calculateDynamicPath = (fullRoute: string, params: Params): string => {
+  return fullRoute.replace(/\[([^\]]+)\]/g, (_, dynamicParamName) => {
+    const paramValue = params[dynamicParamName]
+    return String(paramValue)
+  })
+}
+
 export function useGetDynamicBreadcrumb(routes: Route[]) {
-  const currentPath = usePathname()
-  const { title } = useRouting() // Get the title from the provider context
+  const currentPath = usePathname();
+  const { title } = useRouting();
+  const params = useParams();
 
-  function isDynamicRoute(routePath: string) {
-    return /\[.*?\]/.test(routePath) // Check if the route has dynamic segments like [projectId]
-  }
+  const findRouteBreadcrumb = (routes: Route[], accumulatedPath: string = '', dynamicIndex = 0): BreadcrumbItem[] => {
+    for (const route of routes) {
+      const fullPath = getFullPath(accumulatedPath, route.path);
 
-  function matchDynamicRoute(routePath: string, pathname: string) {
-    // Convert dynamic segments like [projectId] into regex patterns to match the path
-    const dynamicPattern = new RegExp('^' + routePath.replace(/\[.*?\]/g, '[^/]+') + '$')
-    return dynamicPattern.test(pathname)
-  }
+      if (fullPath === currentPath) {
+        // If we are on the current path, return the breadcrumb for this route
+        return [{ label: route.label, path: fullPath }];
+      }
 
-  const findRouteBreadcrumb = (routes: Route[], currentPath: string): BreadcrumbItem[] | null => {
-    const traverse = (routeList: Route[], path: string, trail: BreadcrumbItem[] = []): BreadcrumbItem[] | null => {
-      for (const route of routeList) {
-        const fullPath = route.path
-        let label = route.label
-        const startAdornment = route.startAdornment
-        const endAdornment = route.endAdornment
+      if (matchDynamicRoute(fullPath, currentPath)) {
+        // If we encounter a dynamic route, use the correct title and increment dynamicIndex
+        return [
+          {
+            label: calculateDynamicTitle(route, title, dynamicIndex),
+            path: calculateDynamicPath(fullPath, params),
+          },
+        ];
+      }
 
-        // Check if the route matches the exact path or matches a dynamic route pattern
-        if (fullPath === path || (isDynamicRoute(fullPath) && matchDynamicRoute(fullPath, path))) {
-          // Override label with context title if it's a dynamic route
-          if (isDynamicRoute(fullPath)) {
-            label = title || label
-          }
-
-          // Return breadcrumb item with adornments
-          return [...trail, { label, path, startAdornment, endAdornment }] as BreadcrumbItem[]
-        }
-
-        // Recursively check subroutes
-        if (route.subroutes) {
-          const found = traverse(route.subroutes, path, [
-            ...trail,
-            { label, path: fullPath, startAdornment, endAdornment }
-          ] as BreadcrumbItem[])
-          if (found) return found
+      if (route.subroutes) {
+        // When there are subroutes, pass the incremented dynamicIndex only if we are in a dynamic route
+        const result = findRouteBreadcrumb(route.subroutes, fullPath, dynamicIndex + (isDynamicRoute(route.path) ? 1 : 0));
+        if (result.length) {
+          return [
+            ...result,
+            {
+              label: calculateDynamicTitle(route, title, dynamicIndex),
+              path: calculateDynamicPath(fullPath, params),
+            },
+          ];
         }
       }
-      return null
     }
+    return [];
+  };
 
-    return traverse(routes, currentPath)
-  }
-
-  return findRouteBreadcrumb(routes, currentPath) || []
+  // Call the recursive function to find the breadcrumb items and reverse the result
+  return findRouteBreadcrumb(routes).reverse();
 }
 
 export function useGetRouteTitle(routes: Route[]) {
   const currentPath = usePathname()
-  const { title } = useRouting() // Get the title from the provider context
+  const { title } = useRouting()
 
-  function isDynamicRoute(routePath: string) {
-    return /\[.*?\]/.test(routePath) // Check if the route has dynamic segments like [projectId]
-  }
-
-  function matchDynamicRoute(routePath: string, pathname: string) {
-    const dynamicPattern = new RegExp('^' + routePath.replace(/\[.*?\]/g, '([^/]+)') + '$')
-    return dynamicPattern.test(pathname)
-  }
-
-  function getLabelForPath(pathname: string, routes: Route[]): string | null {
+  function getTitleForPath(routes: Route[], accumulatedPath: string = ''): string | null {
     for (const route of routes) {
-      // Check if it's an exact match or a dynamic match
-      if (route.path === pathname) {
+      const fullPath = getFullPath(accumulatedPath, route.path)
+
+      if (fullPath === currentPath) return route.label
+
+      if (matchDynamicRoute(fullPath, currentPath)) {
+        if (isDynamicRoute(route.path)) return title[title.length - 1] || route.label
         return route.label
       }
 
-      // If it's a dynamic route and matches, return the context title instead
-      if (isDynamicRoute(route.path) && matchDynamicRoute(route.path, pathname)) {
-        return title || route.label // Prefer context title if set
-      }
-
-      // Recursively check subroutes
       if (route.subroutes) {
-        const subrouteLabel = getLabelForPath(pathname, route.subroutes)
+        const subrouteLabel = getTitleForPath(route.subroutes, fullPath)
         if (subrouteLabel) return subrouteLabel
       }
     }
-    return null // Return null if no match is found
+    return null
   }
 
-  return getLabelForPath(currentPath, routes)
+  return getTitleForPath(routes)
 }

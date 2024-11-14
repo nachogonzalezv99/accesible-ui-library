@@ -1,7 +1,7 @@
 import { usePathname, useRouter } from 'next/navigation'
 import { ReactNode } from 'react'
 import { twMerge } from 'tailwind-merge'
-import { Route } from '../_utils/routes'
+import { getFullPath, isDynamicRoute, Route } from '../_utils/routes'
 import { Menu } from './Menu'
 export function Layout({ children }: { children: ReactNode }) {
   return <div className="h-screen flex overflow-hidden bg-white">{children}</div>
@@ -18,42 +18,28 @@ Layout.Menu = function LayoutMenu({ items }: LayoutMenuProps) {
   const router = useRouter()
   const pathname = usePathname()
 
-  // Utility function to check if a path has dynamic parameters
-  const isDynamicPath = (path: string): boolean => /\[.*?\]/.test(path)
-
-  // Recursive function to render menu items, excluding dynamic routes
-  const renderMenuItems = (items: Route[]) => {
+  const renderMenuItems = (items: Route[], accumulatedPath: string = '') => {
     return items
-      .filter(item => !isDynamicPath(item.path)) // Filter out dynamic routes
+      .filter(item => !isDynamicRoute(item.path))
       .map(item => {
-        if (item.label === 'Home') {
-          return (
-            <div key={item.path}>
-              {item.subroutes && item.subroutes.length > 0 && (
-                <div className="ml-4">
-                  <Menu>{renderMenuItems(item.subroutes)}</Menu>
-                </div>
-              )}
-            </div>
-          )
-        }
+        const fullPath = getFullPath(accumulatedPath, item.path)
 
-        return (
-          <div key={item.path}>
-            <Menu.Item
-              leftAddornment={item.startAdornment}
-              className={pathname === item.path ? 'border border-gray bg-gray-100' : ''}
-              onClick={() => router.push(item.path)}
-            >
-              {item.label}
-            </Menu.Item>
-
-            {item.subroutes && item.subroutes.length > 0 && (
-              <div className="ml-4">
-                <Menu>{renderMenuItems(item.subroutes)}</Menu>
-              </div>
-            )}
-          </div>
+        return item.subroutes && item.subroutes.length > 0 ? (
+          <Menu.Subgroup
+            label={item.label}
+            onClick={() => router.push(fullPath)}
+            className={pathname === fullPath ? 'border border-gray bg-gray-100' : ''}
+          >
+            {renderMenuItems(item.subroutes, fullPath)}
+          </Menu.Subgroup>
+        ) : (
+          <Menu.Item
+            leftAddornment={item.startAdornment}
+            className={pathname === fullPath ? 'border border-gray bg-gray-100' : ''}
+            onClick={() => router.push(fullPath)}
+          >
+            {item.label}
+          </Menu.Item>
         )
       })
   }
